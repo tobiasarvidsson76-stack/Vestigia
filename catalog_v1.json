@@ -1,0 +1,360 @@
+{
+  "manufacturing": [
+    [
+      "Feed mill",
+      "A",
+      "1 wheat or barley or maize \u2192 3 grain feed; 1 oats or turnips or press cake \u2192 3 stock feed"
+    ],
+    [
+      "Hay barn",
+      "A",
+      "1 clover \u2192 3 hay"
+    ],
+    [
+      "Grain mill",
+      "A",
+      "2 wheat \u2192 3 flour; 2 rye \u2192 3 rye flour; 2 oats \u2192 3 rolled oats"
+    ],
+    [
+      "Bakery",
+      "A",
+      "2 flour \u2192 3 bread; 2 rye flour \u2192 3 dark bread; 1 flour + 1 egg + 1 cherries \u2192 2 cherry pies"
+    ],
+    [
+      "Malt house",
+      "B",
+      "2 barley \u2192 3 malt"
+    ],
+    [
+      "Brewery",
+      "B",
+      "2 malt + 1 hops \u2192 3 ale"
+    ],
+    [
+      "Orchard press",
+      "A",
+      "2 apples \u2192 2 apple juice; 2 pears \u2192 2 pear juice; 2 grapes \u2192 2 grape juice"
+    ],
+    [
+      "Cider house",
+      "B",
+      "2 apple juice \u2192 2 cider; 2 grape juice \u2192 2 vinegar"
+    ],
+    [
+      "Sugar house",
+      "B",
+      "2 sugar beet \u2192 3 sugar"
+    ],
+    [
+      "Preserve kitchen",
+      "B",
+      "2 strawberries or plums or berries + 1 sugar \u2192 3 jam; 2 cucumbers or cabbage + 1 vinegar \u2192 3 pickles"
+    ],
+    [
+      "Oil press",
+      "B",
+      "2 sunflowers or rapeseed or olives \u2192 2 oil + 1 press cake"
+    ],
+    [
+      "Dairy",
+      "B",
+      "2 cow milk \u2192 2 butter; 2 goat milk \u2192 2 goat cheese; 2 buffalo milk \u2192 2 mozzarella"
+    ],
+    [
+      "Town kitchen",
+      "B",
+      "1 rolled oats + 1 honey \u2192 2 porridge; 1 peas or beans + 1 onions \u2192 2 soup; 1 tomatoes + 1 oil \u2192 2 sauce; 1 flour + 1 sauce + 1 mozzarella \u2192 3 flatbreads"
+    ],
+    [
+      "Smokehouse",
+      "B",
+      "2 trout + 1 log \u2192 3 smoked fish; 2 pork + 1 rock salt \u2192 3 cured pork"
+    ],
+    [
+      "Compost yard",
+      "A",
+      "1 manure + 1 clover \u2192 3 compost; 1 press cake + 1 reeds \u2192 2 compost"
+    ],
+    [
+      "Fibre shed",
+      "A",
+      "2 flax \u2192 3 linen yarn; 2 cotton \u2192 3 cotton yarn; 2 wool or fleece or angora fibre \u2192 3 spun yarn"
+    ],
+    [
+      "Weaving house",
+      "B",
+      "2 linen yarn \u2192 2 linen; 2 cotton yarn \u2192 2 cotton cloth; 2 spun yarn \u2192 2 wool cloth"
+    ],
+    [
+      "Dye works",
+      "B",
+      "2 madder \u2192 3 red dye; 2 ochre \u2192 3 pigment; 1 wool cloth + 1 red dye \u2192 2 dyed cloth"
+    ],
+    [
+      "Tailor",
+      "C",
+      "2 linen \u2192 2 shirts; 1 dyed cloth + 1 cotton cloth \u2192 2 coats; 1 linen + 2 down \u2192 2 quilts"
+    ],
+    [
+      "Tannery",
+      "B",
+      "1 hide + 1 rock salt \u2192 2 leather"
+    ],
+    [
+      "Cobbler",
+      "B",
+      "1 leather + 1 linen yarn \u2192 2 boots"
+    ],
+    [
+      "Chandlery",
+      "B",
+      "1 beeswax + 1 cotton yarn \u2192 3 candles; 1 oil + 1 lavender \u2192 2 scented soap"
+    ],
+    [
+      "Paper mill",
+      "B",
+      "2 reeds + 1 log \u2192 4 paper"
+    ],
+    [
+      "Print shop",
+      "C",
+      "1 graphite + 1 oil \u2192 2 ink; 2 paper + 1 ink \u2192 3 books"
+    ],
+    [
+      "Furniture shop",
+      "C",
+      "2 planks + 1 linen \u2192 2 chairs; 2 planks + 1 quilt \u2192 2 beds"
+    ],
+    [
+      "Lime kiln",
+      "B",
+      "2 limestone + 1 coal \u2192 3 lime"
+    ],
+    [
+      "Mason",
+      "B",
+      "1 lime + 1 sand \u2192 3 mortar; 1 gypsum + 1 lime \u2192 3 plaster; 1 gravel + 1 mortar \u2192 3 paving blocks"
+    ],
+    [
+      "Glassworks",
+      "C",
+      "2 sand + 1 limestone \u2192 3 glass; 2 quartz + 1 coal \u2192 2 optical glass"
+    ],
+    [
+      "Pottery",
+      "B",
+      "2 clay \u2192 3 crockery; 2 kaolin + 1 quartz \u2192 3 porcelain"
+    ],
+    [
+      "Foundry",
+      "C",
+      "1 tin ore + 1 coal \u2192 1 tin bar; 1 zinc ore + 1 coal \u2192 1 zinc bar; 1 silver ore + 1 coal \u2192 1 silver bar; 1 gold ore + 1 coal \u2192 1 gold bar; 2 bauxite + 1 coal \u2192 1 aluminium bar"
+    ],
+    [
+      "Alloy works",
+      "C",
+      "1 copper bar + 1 tin bar \u2192 2 bronze; 1 copper bar + 1 zinc bar \u2192 2 brass; 2 iron bars + 1 coal \u2192 2 steel"
+    ],
+    [
+      "Workshop",
+      "C",
+      "1 bronze + 1 plank \u2192 2 fittings; 1 steel + 1 oil \u2192 2 gears; 1 copper bar \u2192 2 copper wire"
+    ],
+    [
+      "Instrument maker",
+      "D",
+      "1 brass + 1 optical glass \u2192 2 survey scopes; 1 brass + 1 gear \u2192 2 clocks"
+    ],
+    [
+      "Rubber works",
+      "C",
+      "2 latex + 1 sulphur \u2192 2 rubber; 1 rubber + 1 steel \u2192 2 tyres"
+    ],
+    [
+      "Machine works",
+      "D",
+      "2 gears + 1 copper wire + 1 aluminium bar \u2192 1 motor; 1 motor + 2 tyres + 1 steel \u2192 1 vehicle kit"
+    ],
+    [
+      "Jeweller",
+      "D",
+      "1 silver bar + 1 diamond \u2192 2 silver rings; 1 gold bar + 1 diamond \u2192 2 gold rings"
+    ]
+  ],
+  "animals": [
+    [
+      "Chickens",
+      "1 grain feed",
+      "30 min",
+      "3 eggs"
+    ],
+    [
+      "Ducks",
+      "1 grain feed",
+      "45 min",
+      "2 eggs + 1 down"
+    ],
+    [
+      "Geese",
+      "1 hay + 1 grain feed",
+      "60 min",
+      "3 down + 1 egg"
+    ],
+    [
+      "Sheep",
+      "1 hay",
+      "90 min",
+      "3 wool"
+    ],
+    [
+      "Goats",
+      "1 hay",
+      "60 min",
+      "3 goat milk"
+    ],
+    [
+      "Dairy cattle",
+      "1 hay + 1 stock feed",
+      "90 min",
+      "5 cow milk + 1 manure"
+    ],
+    [
+      "Buffalo",
+      "2 hay",
+      "120 min",
+      "4 buffalo milk + 1 manure"
+    ],
+    [
+      "Pigs",
+      "2 stock feed",
+      "120 min",
+      "2 pork + 1 hide"
+    ],
+    [
+      "Rabbits",
+      "1 carrot or 1 clover",
+      "60 min",
+      "2 angora fibre"
+    ],
+    [
+      "Alpacas",
+      "2 hay",
+      "120 min",
+      "4 fleece"
+    ],
+    [
+      "Bees",
+      "1 clover",
+      "60 min",
+      "2 honey + 1 beeswax"
+    ],
+    [
+      "Trout",
+      "1 stock feed",
+      "90 min",
+      "3 trout"
+    ]
+  ],
+  "crops": [
+    [
+      "Field",
+      "loam",
+      "Wheat 1 h, barley 2 h, rye 3 h, oats 2 h, maize 4 h"
+    ],
+    [
+      "Field",
+      "sandy",
+      "Potatoes 1 h, carrots 2 h, sugar beet 4 h, flax 4 h"
+    ],
+    [
+      "Field",
+      "heavy",
+      "Beans 1 h, cabbage 2 h, peas 2 h, turnips 3 h"
+    ],
+    [
+      "Field",
+      "loam",
+      "Sunflowers 4 h, rapeseed 4 h, cotton 6 h"
+    ],
+    [
+      "Garden",
+      "loam",
+      "Strawberries 2 h, tomatoes 3 h, onions 2 h, cucumbers 2 h"
+    ],
+    [
+      "Garden",
+      "sandy",
+      "Lavender 4 h, madder 5 h"
+    ],
+    [
+      "Orchard",
+      "loam",
+      "Apples 8 h, pears 8 h, plums 8 h, cherries 8 h"
+    ],
+    [
+      "Orchard",
+      "sandy",
+      "Olives 8 h"
+    ],
+    [
+      "Trellis",
+      "sandy",
+      "Grapes 6 h"
+    ],
+    [
+      "Trellis",
+      "heavy",
+      "Hops 6 h"
+    ],
+    [
+      "Meadow",
+      "heavy",
+      "Clover 2 h"
+    ],
+    [
+      "Field",
+      "Heavy",
+      "Rice 3 h, lentils 2 h, chickpeas 3 h"
+    ],
+    [
+      "Field",
+      "Sandy",
+      "Buckwheat 2 h, millet 2 h, peanuts 4 h"
+    ],
+    [
+      "Field",
+      "Loam",
+      "Spelt 3 h, hemp 5 h, mustard 3 h"
+    ],
+    [
+      "Garden",
+      "Heavy",
+      "Leeks 2 h, spinach 2 h, beetroot 3 h"
+    ],
+    [
+      "Garden",
+      "Sandy",
+      "Garlic 3 h, sesame 4 h, saffron 8 h"
+    ],
+    [
+      "Orchard",
+      "Loam",
+      "Peaches 7 h, walnuts 9 h, coffee 10 h"
+    ],
+    [
+      "Orchard",
+      "Sandy",
+      "Almonds 8 h, lemons 7 h, figs 7 h"
+    ],
+    [
+      "Orchard",
+      "Heavy",
+      "Tea 6 h"
+    ],
+    [
+      "Trellis",
+      "Loam",
+      "Blackberries 4 h, vanilla 10 h"
+    ]
+  ]
+}

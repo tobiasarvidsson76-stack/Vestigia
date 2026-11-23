@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vestigia</title>
+<link rel="stylesheet" href="/style.css">
+<script defer src="/app.js"></script>
+</head>
+<body>
+<header><div><small>THE WALKING CITY</small><h1>Vestigia</h1></div><div id="balance"></div></header>
+<main>
+<section class="world" aria-label="City map">
+<div class="toolbar"><button id="walk">Start walk</button><span id="tracking"></span><button id="clock">Advance clock</button></div>
+<div id="map" aria-label="Revealed tiles"></div>
+<div class="toolbar directions" aria-label="Simulated movement"><span>Fixture movement · 60 m</span><button data-dx="-1" data-dy="0" aria-label="Walk west">←</button><button data-dx="0" data-dy="-1" aria-label="Walk north">↑</button><button data-dx="0" data-dy="1" aria-label="Walk south">↓</button><button data-dx="1" data-dy="0" aria-label="Walk east">→</button></div>
+<p id="notice" role="status" aria-live="polite"></p>
+</section>
+<aside>
+<nav aria-label="City panels"><button data-panel="site">Site</button><button data-panel="city">City</button><button data-panel="research">Research</button><button data-panel="almanac">Almanac</button></nav>
+<div id="panel"></div>
+</aside>
+</main>
+</body>
+</html>
