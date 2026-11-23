@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: vestigia
+      POSTGRES_USER: vestigia
+      POSTGRES_PASSWORD: vestigia-local-only
+    volumes:
+      - vestigia-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vestigia -d vestigia"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  game:
+    build: .
+    environment:
+      VESTIGIA_DATABASE_URL: postgresql://vestigia:vestigia-local-only@db/vestigia
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+volumes:
+  vestigia-db:

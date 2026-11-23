@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["VoucherStoreModule"] },
+  "android": { "modules": ["com.vestigia.store.VoucherStoreModule"] }
+}

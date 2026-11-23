@@ -3,6 +3,9 @@ import hashlib
 import math
 import random
 
+import live_world
+from pedestrian import distance, route, snap, unproject
+
 from catalog import ANIMALS, CROPS, EXTRACTORS, MINERALS, PRICES, RECIPES, SITES, SPEED, STORAGE, SURFACE, TECH, WOODS, matches, quantities
 
 HOMES = {'cottage':(4,1,12), 'townhouse':(8,2,24), 'apartment house':(16,4,48), 'town store':(2,0,0)}
@@ -49,17 +52,20 @@ def make_site(tile, kind, cost, now):
 def point(i,j):
     return f'{i},{j}'
 
-def world_tile(g,i,j):
+def world_tile(g,i,j,opportunity=True):
     key = point(i,j)
     rng = random.Random(int.from_bytes(hashlib.sha256(f"{g['seed']}/{key}".encode()).digest()[:8]))
-    rank = len(g['tiles'])
+    rank = g.get('opportunities',len(g['tiles']))
     grade_roll = rng.random()
     band = (35,64) if grade_roll<.6 else (65,84) if grade_roll<.9 else (85,100)
     grade = rng.randint(*band)
     soil = rng.choice(['loam','sandy','heavy'])
     assigned = {1:'pine',2:'field',3:'stone',4:'clay'}
     g['tiles'][key] = tile = dict(id=key,x=i*60,y=j*60,grade=grade,soil=soil,
-        resource=assigned.get(rank,'land'),truth=None,difficulty=None,report=None,survey=None)
+        resource=assigned.get(rank,'land') if opportunity else 'land',truth=None,difficulty=None,report=None,survey=None)
+    g['opportunities']=rank+int(opportunity)
+    if not opportunity:
+        return tile
     if 5<=rank<=48 and (rank-5)%7==0 and (rank-5)//7<len(MINERALS[:5]):
         tile.update(resource='prospect',truth=MINERALS[(rank-5)//7],difficulty=3 if rank==5 else rng.choices([1,2,3],[50,35,15])[0])
     elif rank>=49:
@@ -100,24 +106,65 @@ def world_tile(g,i,j):
         tile['resource']=rng.choice(['field','stone','clay'])
     return tile
 
-def new_game(seed, now):
+def new_game(seed, now, graph=None):
     g = dict(seed=seed,now=now,coins=30,xp=0,cargo=[],tiles={},sites={},citizens=[],
              technologies=['Settlement basics'],research=None,walking=False,walk_started=None,
              fix=None,road_track=None,roads={},jobs=[],vouchers=0,receipts=[],grants=[],
              orders={},truck_kit=False)
-    start = world_tile(g,0,0)
-    g['sites'][start['id']] = home = make_site(start,'town store',[],now)
+    if graph is not None:
+        g['graph']=graph
+    else:
+        begin_city(g,world_tile(g,0,0))
+    return g
+
+def begin_city(g,tile):
+    g['town_store']=tile['id']
+    g['sites'][tile['id']]=home=make_site(tile,'town store',[],g['now'])
     home['built']=True
     resident(g,home,0)
     resident(g,home,2)
-    return g
+
+def discover_live(g,fix):
+    i,j=round(fix['x']/60),round(fix['y']/60)
+    key=point(i,j)
+    if key in g['tiles']:
+        return
+    sites=g['tiles']
+    if sites and not route(g['graph'],sites[g['town_store']],fix):
+        return
+    edges=g.setdefault('explored_edges',[])
+    opportunity=fix['edge'] not in edges
+    if opportunity:
+        edges.append(fix['edge'])
+    tile=world_tile(g,i,j,opportunity=opportunity)
+    tile.update({k:fix[k] for k in ('x','y','edge','t')})
+    if len(g['tiles'])==1:
+        begin_city(g,tile)
+    else:
+        g['xp']+=2
+
+def relocate_site(g,tile):
+    graph=g.get('graph')
+    require(graph and tile,'Select an inaccessible discovered site')
+    origin=dict(x=60*round(tile['x']/60),y=60*round(tile['y']/60))
+    previous=tile['edge']
+    excluded={previous}|{t['edge'] for t in g['tiles'].values() if t is not tile}
+    while replacement:=snap(graph,origin,42,excluded):
+        if all(round(replacement[k]/60)==round(origin[k]/60) for k in ('x','y')):
+            start=g['tiles'][g['town_store']]
+            if route(graph,start,replacement):
+                tile.update({k:replacement[k] for k in ('x','y','edge','t')})
+                return
+        excluded.add(replacement['edge'])
+    raise RuleError('No connected replacement segment in this tile')
+
 
 def resident(g,home,education):
     n=len(g['citizens'])
     g['citizens'].append(dict(id=n,home=home['id'],education=education,assignment=None))
 
 def education(g):
-    return 100*sum(c['education'] for c in g['citizens'])/(3*len(g['citizens']))
+    return 100*sum(c['education'] for c in g['citizens'])/(3*max(1,len(g['citizens'])))
 
 def capacity(g):
     xp = g['xp']
@@ -161,8 +208,10 @@ def begin_batch(g,s):
     stock=[lot.copy() for lot in s['input']]
     lots=[]
     try:
-        for q,good in selected_inputs(r,s['choices']):
-            lots.extend(take(stock,good,q,s.get('minimum',0),s.get('highest',False)))
+        for index,(q,good) in enumerate(selected_inputs(r,s['choices'])):
+            floors=s.get('floors',[])
+            floor=floors[index] if index<len(floors) else s.get('minimum',0)
+            lots.extend(take(stock,good,q,floor,s.get('highest',False)))
     except RuleError:
         return
     skill=s['skill']
@@ -341,8 +390,12 @@ def eligible(tile,kind):
 
 def nearby(g,tile):
     fix=g['fix']
-    return bool(fix and 0<=g['now']-fix['at']<=60 and
-                math.dist((fix['x'],fix['y']),(tile['x'],tile['y']))<=40)
+    if not fix or not 0<=g['now']-fix['at']<=60 or distance(fix,tile)>40:
+        return False
+    if 'graph' in g and 'edge' in tile:
+        path=route(g['graph'],g['matched'],tile)
+        return bool(path and path[0]<=40)
+    return True
 
 def fix_position(g,a):
     x,y=float(a['x']),float(a['y'])
@@ -489,6 +542,11 @@ def pay(g,fee):
 
 def quote(g,source,dest):
     a,b=g['tiles'][source],g['tiles'][dest]
+    if 'graph' in g:
+        metres,sections=live_world.path_quote(g,a,b)
+        paved=sum(m for key,m in sections.items() if key in g['roads'] and road_tier(g['roads'][key])==4)
+        return dict(metres=math.ceil(metres),fee=2+math.ceil((metres-.25*paved)/250),
+                    seconds=120+60*math.ceil(metres/200))
     metres=abs(a['x']-b['x'])+abs(a['y']-b['y'])
     require(metres>0,'Choose different sites')
     row=int(a['y']/60)
@@ -502,6 +560,27 @@ def quote(g,source,dest):
             paved+=60
     return dict(metres=metres,fee=2+math.ceil((metres-.25*paved)/250),seconds=120+60*math.ceil(metres/200))
 
+def planning_route(g,key):
+    tile=g['tiles'].get(key)
+    require(tile is not None,'Select a revealed tile')
+    start=g.get('matched') or g['tiles'].get(g.get('town_store'))
+    require(start is not None,'Locate the city first')
+    if 'graph' not in g:
+        start=g['fix'] or start
+        return dict(metres=round(abs(start['x']-tile['x'])+abs(start['y']-tile['y'])),line=[])
+    graph=g['graph']
+    found=route(graph,start,tile)
+    require(found is not None,'No connected pedestrian route to this tile')
+    metres,legs=found
+    points=[unproject(graph['origin'],start['x'],start['y'])]
+    for edge,lo,hi in legs:
+        if lo==hi:
+            continue
+        p,q=(graph['edges'][edge][name] for name in ('p','q'))
+        tail={k:p[k]+(q[k]-p[k])*hi for k in ('x','y')}
+        points.append(unproject(graph['origin'],**tail))
+    return dict(metres=math.ceil(metres),line=points)
+
 def positive(a,key='qty',maximum=1200):
     n=a.get(key)
     require(type(n) is int and 1<=n<=maximum,f'{key} must be an integer from 1 to {maximum}')
@@ -509,18 +588,37 @@ def positive(a,key='qty',maximum=1200):
 
 EXPORT_TIERS = ((8,16,40,1.25),(4,8,65,1.75),(2,5,80,2.5))
 
+def producible(g):
+    goods=set()
+    sites=[s for s in g['sites'].values() if s['built']]
+    for tile in g['tiles'].values():
+        source=tile['resource']
+        if source in WOODS:
+            goods.add(source+' log')
+        elif source in SURFACE:
+            goods.add(source)
+        elif tile['report'] and tile['report']['mineral'] and 'Prospecting' in g['technologies']:
+            goods.add(tile['report']['mineral'])
+    plots={s['kind'] for s in sites}
+    goods.update(name for name,crop in CROPS.items() if crop['plot'] in plots and crop['tech'] in g['technologies'])
+    recipes=[RECIPES[key] for s in sites for key in recipe_options(s,g['tiles'][s['id']])
+             if RECIPES[key]['tech'] in g['technologies']]
+    finished=set()
+    while True:
+        size=len(goods)
+        for recipe in recipes:
+            if all(any(matches(n,good) for n in names for good in goods)
+                    for _,names in recipe['inputs']):
+                outputs={good for _,good in recipe['outputs']}
+                goods.update(outputs)
+                if recipe['inputs']:
+                    finished.update(outputs)
+        if len(goods)==size:
+            return goods,finished
+
 def offers(g):
     window=int(g['now']//86400)
-    known=set()
-    for s in g['sites'].values():
-        if not s['built']:
-            continue
-        for key in recipe_options(s,g['tiles'][s['id']]):
-            r=RECIPES[key]
-            if r['tech'] in g['technologies']:
-                known.update(good for _,good in r['outputs'])
-        if s['crop']:
-            known.add(s['crop']['name'])
+    known,_=producible(g)
     known=sorted(known or {'pine log'})
     result=[]
     for tier,(low,high,floor,multiplier) in enumerate(EXPORT_TIERS):
@@ -563,19 +661,15 @@ def exchange(g,a,s):
 CIVIC_SITES=('library','market hall','clock tower')
 
 def market_slots(g):
-    return ['0,0']+[next(s['id'] for s in g['sites'].values() if s['kind']==kind and s['built'])
+    if not g.get('town_store'):
+        return []
+    return [g['town_store']]+[next(s['id'] for s in g['sites'].values() if s['kind']==kind and s['built'])
                    for kind in CIVIC_SITES
                    if any(s['kind']==kind and s['built'] for s in g['sites'].values())]
 
 def market_choices(g):
-    producers=set()
-    for s in g['sites'].values():
-        if s['built']:
-            for key in recipe_options(s,g['tiles'][s['id']]):
-                r=RECIPES[key]
-                if r['inputs'] and r['tech'] in g['technologies']:
-                    producers.update(good for _,good in r['outputs'] if PRICES[good]>1)
-    return sorted(producers)
+    _,finished=producible(g)
+    return sorted(good for good in finished if PRICES[good]>1)
 
 def market_offer(g,slot):
     saved=g.get('market',{}).get(slot)
@@ -592,7 +686,7 @@ def market_offer(g,slot):
     rng.shuffle(goods)
     good=goods[offset]
     qty=rng.randint(2,6)
-    level=g['sites'][slot]['level'] if slot!='0,0' else 1
+    level=g['sites'][slot]['level'] if slot!=g['town_store'] else 1
     payout=math.ceil(1.5*qty*PRICES[good]*(1+.02*(level-1))-1e-9)
     return dict(id=f'{slot}/{sequence}',sequence=sequence,good=good,qty=qty,payout=payout,active=True)
 
@@ -602,7 +696,7 @@ def market_command(g,a):
     offer=market_offer(g,slot)
     require(offer and offer.get('id')==a['order'],'Market order is unavailable')
     if a['op']=='fill market order':
-        take(g['sites']['0,0']['shared'],offer['good'],offer['qty'])
+        take(g['sites'][g['town_store']]['shared'],offer['good'],offer['qty'])
         g['coins']+=offer['payout']
     g.setdefault('market',{})[slot]=dict(offer,active=False,refresh=g['now']+43200)
 
@@ -617,13 +711,29 @@ def command(g,a):
     op=a['op']
     s=g['sites'].get(a.get('site'))
     tile=g['tiles'].get(a.get('site'))
-    if op in ('fill market order','dismiss market order'):
+    if 'graph' in g:
+        require(op not in ('step','fix','advance','purchase'),'Fixture controls are unavailable in GPS mode')
+    if op=='gps samples':
+        require('graph' in g,'City uses simulated positions')
+        if g['walking']:
+            require(a.get('session')==g.get('walk_session'),'Location batch belongs to a different walk')
+        live_world.apply_samples(g,a['samples'],g['now'],discover_live)
+    elif op=='relocate site':
+        relocate_site(g,tile)
+    elif op in ('fill market order','dismiss market order'):
         market_command(g,a)
     elif op in ('accept export','ship export','abandon export'):
         exchange(g,a,s)
     elif op=='walk':
+        if 'graph' in g and a['enabled'] and g['walking']:
+            require(a.get('session')==g.get('walk_session'),'Stop the existing walk first')
+            return
         g['walking']=bool(a['enabled'])
         g['walk_started']=g['now'] if g['walking'] else None
+        if 'graph' in g:
+            session=a.get('session')
+            require(not g['walking'] or isinstance(session,str) and 1<=len(session)<=100,'A walk session ID is required')
+            g['walk_session']=session if g['walking'] else None
         g['road_track']=None
     elif op=='fix':
         fix_position(g,a)
@@ -667,7 +777,7 @@ def command(g,a):
         require(not report or not report['mineral'] and tier>report['tier'],'Coverage already reached')
         fee,seconds=SURVEY[tier-1]
         if a.get('scope'):
-            take(g['sites']['0,0']['shared'],'survey scopes',1)
+            take(g['sites'][g['town_store']]['shared'],'survey scopes',1)
             seconds/=2
         pay(g,fee)
         tile['survey']=dict(tier=tier,at=g['now']+seconds)
@@ -675,7 +785,7 @@ def command(g,a):
         key=a['road']
         road=g['roads'].get(key)
         require(road is not None,'Walk this section first')
-        require(nearby(g,road_anchor(key)),'A reliable fix within 40 m of the road is required')
+        require(nearby(g,road['anchor'] if 'anchor' in road else road_anchor(key)),'A reliable fix within 40 m of the road is required')
         tier=road_tier(road)+1
         require(tier<=4 and tier==a.get('tier'),'Road tier has changed')
         pile=road.setdefault('paving',[])
@@ -689,7 +799,7 @@ def command(g,a):
     elif op=='reclaim paving':
         road=g['roads'].get(a['road'])
         require(road and road.get('paving'),'Road has no staged materials')
-        require(nearby(g,road_anchor(a['road'])),'A reliable fix within 40 m of the road is required')
+        require(nearby(g,road['anchor'] if 'anchor' in road else road_anchor(a['road'])),'A reliable fix within 40 m of the road is required')
         qty=positive(a,maximum=3)
         require(count(g['cargo'])+qty<=capacity(g),'Cargo is full')
         g['cargo'].extend(take(road['paving'],'paving blocks',qty))
@@ -781,13 +891,16 @@ def command(g,a):
                 choices=a.get('choices',[])
                 require(len(choices)<=len(r['inputs']) and all(x in r['inputs'][i][1] for i,x in enumerate(choices)),'Invalid ingredient alternatives')
                 minimum=a.get('minimum',0)
-                require(type(minimum) is int and 0<=minimum<=100,'Quality floor must be 0–100')
+                floors=a.get('floors',[])
+                require(type(minimum) is int and 0<=minimum<=100 and isinstance(floors,list) and
+                        len(floors)<=len(r['inputs']) and all(type(q) is int and 0<=q<=100 for q in floors),
+                        'Quality floors must be integers from 0–100')
                 inputs=selected_inputs(r,choices)
                 pending=(lot for j in g['jobs'] if not j['done'] and j['dst']==s['id'] and j['buffer']=='input'
                          for lot in j['lots'])
                 require(all(any(matches(good,lot['good']) for _,good in inputs) for lot in pending),
                         'Wait for incompatible inbound stock')
-                s.update(recipe=a['name'],choices=choices,minimum=minimum,highest=bool(a.get('highest')))
+                s.update(recipe=a['name'],choices=choices,minimum=minimum,floors=floors,highest=bool(a.get('highest')))
             elif op=='plant':
                 name=a['name']
                 require(name in CROPS and CROPS[name]['plot']==SITES[s['kind']]['plot'] and not s['crop'],'Crop does not fit or plot is occupied')
@@ -906,9 +1019,35 @@ def staff(g,s,idx,credential):
                 cycle['at']=g['now']+cycle['remaining']
                 cycle['remaining']=None
 
+def assessment(g,s):
+    if not s['built']:
+        return None
+    if s['crop'] and s['crop']['at']<=g['now']:
+        return 'Crop ready to harvest'
+    if not s['recipe']:
+        return None
+    r=RECIPES[s['recipe']]
+    if s['worker'] is None:
+        return 'Needs a qualified lead'
+    if s['batch']:
+        return None
+    if r['tech'] not in g['technologies']:
+        return 'Needs '+r['tech']+' research'
+    if count(s['output'])+sum(q for q,_ in r['outputs'])>cap(s,'output'):
+        return 'Output buffer full'
+    for index,(qty,good) in enumerate(selected_inputs(r,s['choices'])):
+        floors=s.get('floors',[])
+        floor=floors[index] if index<len(floors) else s.get('minimum',0)
+        stock=sum(l['qty'] for l in s['input'] if matches(good,l['good']) and l['q']>=floor)
+        if stock<qty:
+            return f'Waiting for {good}'+(f' Q{floor}+' if floor else '')
+    return None
+
 def view(g):
-    public={k:v for k,v in g.items() if k not in ('seed','tiles','sites','receipts','road_track','market','offer_board','wall_at')}
+    public={k:v for k,v in g.items() if k not in ('seed','tiles','sites','receipts','road_track','market','offer_board','wall_at','graph','matched','opportunities','explored_edges')}
     public['capacity']=capacity(g)
+    public['mode']='gps' if 'graph' in g else 'fixture'
+    public['origin']=g['graph']['origin'] if 'graph' in g else None
     public['offers']=offers(g)
     public['market_orders']={slot:market_offer(g,slot) for slot in market_slots(g)}
     public['education']=education(g)
@@ -917,10 +1056,15 @@ def view(g):
         public['tiles'][key]={k:v for k,v in tile.items() if k not in ('truth','difficulty') and (
             k!='grade' or tile['resource']!='prospect' or tile['report'] and tile['report']['mineral'])}
         public['tiles'][key]['nearby']=nearby(g,tile)
+        if key not in g['sites']:
+            public['tiles'][key]['eligible']=[k for k in SITES if k!='town store' and eligible(tile,k)]
+        if 'graph' in g:
+            public['tiles'][key].update(unproject(g['graph']['origin'],tile['x'],tile['y']))
     public['sites']={}
     for key,s in g['sites'].items():
         data=public['sites'][key]=s.copy()
         data['capacity']={b:cap(s,b) for b in ('input','output','shared') if s['kind'] in SITES}
+        data['assessment']=assessment(g,s)
         data['options']=recipe_options(s,g['tiles'][key])
         data['next_cost']=upgrade_cost(s) if s['level']<10 else []
         if s['kind'] in CONVERSIONS:

@@ -1,0 +1,2 @@
+app-store-server-library>=2,<5
+google-auth[requests]>=2,<3
