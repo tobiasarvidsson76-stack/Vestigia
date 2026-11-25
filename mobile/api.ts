@@ -15,7 +15,7 @@ async function refreshToken() {
     return null;
   }
   if(!response.ok) throw new RequestError('Sign-in provider is temporarily unavailable', response.status);
-  const ticket: {token:string;refresh_token:string} = await response.json();
+  const ticket: {token:string;refresh_token:string} = await readResponse(response);
   await AsyncStorage.multiSet([[TOKEN,ticket.token],[REFRESH,ticket.refresh_token]]);
   return ticket.token;
 }
@@ -28,6 +28,21 @@ export function nonce() {
 
 export class RequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
+}
+
+async function readResponse(response: Response) {
+  const body = await response.text();
+  let result;
+  try {
+    result = JSON.parse(body);
+  } catch {
+    throw new RequestError(
+      `Vestigia server returned ${body.trim() ? 'an unreadable' : 'an empty'} response (HTTP ${response.status}).`,
+      response.status,
+    );
+  }
+  if (!response.ok) throw new RequestError(result?.error ?? 'Server request failed', response.status);
+  return result;
 }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown, key?: string): Promise<T> {
@@ -49,7 +64,5 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, k
     }
     response=await fetch(API+'/api/'+path,options);
   }
-  const result = await response.json();
-  if (!response.ok) throw new RequestError(result.error ?? 'Server request failed', response.status);
-  return result as T;
+  return readResponse(response) as Promise<T>;
 }

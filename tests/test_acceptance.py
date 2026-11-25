@@ -4,6 +4,7 @@ import json
 import tempfile
 import io
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import catalog
@@ -28,6 +29,13 @@ class Acceptance(unittest.TestCase):
     def step(self,dx=1,dy=0):
         return self.act('step',dx=dx,dy=dy)
 
+    def finish_build(self,site):
+        state=self.act('build',site=site)
+        finish=state['sites'][site]['construction']['at']
+        state=self.act('advance',seconds=max(1,finish-state['now']))
+        tile=state['tiles'][site]
+        return self.act('fix',x=tile['x'],y=tile['y'])
+
     def opening(self):
         self.assertEqual(len(server.city(self.token)['tiles']),1)
         self.act('walk',enabled=True)
@@ -37,9 +45,9 @@ class Acceptance(unittest.TestCase):
         self.act('plan',site='2,0',kind='sawmill')
         with self.assertRaisesRegex(game.RuleError,'40 m'):
             self.act('build',site='1,0')
-        self.act('build',site='2,0')
+        self.finish_build('2,0')
         self.step(-1)
-        self.act('build',site='1,0')
+        self.finish_build('1,0')
         self.act('pickup',site='1,0',buffer='output',qty=1,good='pine log')
         self.step()
         state=self.act('deliver',site='2,0',buffer='input',qty=1,good='pine log')
@@ -58,15 +66,112 @@ class Acceptance(unittest.TestCase):
             self.act('pickup',site='2,0',buffer='output',qty=1,good='pine plank')
             self.step()
             self.act('deliver',site='3,0',buffer='materials',qty=1,good='pine plank')
-        return self.act('build',site='3,0')
+        return self.finish_build('3,0')
+
+    def test_construction_finishes_on_its_timer(self):
+        self.act('walk',enabled=True)
+        self.step()
+        self.act('plan',site='1,0',kind='lumberjack station')
+        state=self.act('build',site='1,0')
+        station=state['sites']['1,0']
+        self.assertFalse(station['built'])
+        self.assertEqual(station['output'],[])
+        self.assertGreater(station['construction']['at'],state['now'])
+        self.assertGreater(game.construction_duration('clock tower',catalog.SITES['clock tower']['cost']),
+                           station['construction']['duration'])
+        self.assertGreater(game.construction_duration('cottage',catalog.SITES['cottage']['cost']),
+                           station['construction']['duration'])
+        with self.assertRaisesRegex(game.RuleError,'before construction starts'):
+            self.act('cancel',site='1,0')
+        state=self.act('advance',seconds=station['construction']['duration']-5)
+        self.assertFalse(state['sites']['1,0']['built'])
+        state=self.act('advance',seconds=5)
+        self.assertTrue(state['sites']['1,0']['built'])
+        self.assertEqual(game.count(state['sites']['1,0']['output']),1)
+        self.assertEqual(state['sites']['1,0']['batch']['at']-state['now'],900)
+
+    def test_location_based_start_uses_the_players_own_walking_graph(self):
+        from local_maps import area_origin
+        def regional_data(endpoint,area):
+            lat,lon=area_origin(area)
+            node_id=int((lat+90)*100)*100000+int((lon+180)*100)
+            return {'elements':[
+                dict(type='node',id=node_id,lat=lat,lon=lon-.001),
+                dict(type='node',id=node_id+1,lat=lat,lon=lon+.001),
+                dict(type='way',id=node_id+2,nodes=[node_id,node_id+1],tags={'highway':'footway'}),
+            ]}
+        with patch.object(server,'OVERPASS_URL','https://maps.example/interpreter'), \
+                patch('local_maps.load_area',side_effect=regional_data) as fetch:
+            cities=[]
+            for latitude,longitude in ((56.165,14.865),(55.675,12.575)):
+                new=server.create()
+                self.assertEqual(new['city']['mode'],'gps')
+                self.assertIsNone(new['city']['origin'])
+                point=dict(latitude=latitude,longitude=longitude,accuracy=5,at=new['city']['now'])
+                command=dict(op='gps samples',samples=[point])
+                located=server.city(new['token'],command,'first-fix')
+                self.assertTrue(located.get('town_store'))
+                self.assertEqual(located['map_revision'],1)
+                self.assertAlmostEqual(located['origin'][0],latitude)
+                self.assertAlmostEqual(located['origin'][1],longitude)
+                self.assertEqual(server.city(new['token'],command,'first-fix')['town_store'],located['town_store'])
+                cities.append((new['token'],point))
+            self.assertEqual(fetch.call_count,2)
+            token,point=cities[0]
+            other_token,_=cities[1]
+            bounds=dict(south=point['latitude']-.005,north=point['latitude']+.005,
+                        west=point['longitude']-.005,east=point['longitude']+.005)
+            self.assertTrue(server.map_paths(bounds,server.city_graph(token))['paths'])
+            self.assertFalse(server.map_paths(bounds,server.city_graph(other_token))['paths'])
+            earlier=server.city_graph(token)
+            next_point=dict(point,longitude=point['longitude']+.01,at=point['at']+2)
+            expanded=server.city(token,dict(op='gps samples',samples=[next_point]),'second-area')
+            current=server.city_graph(token)
+            self.assertEqual(expanded['map_revision'],2)
+            self.assertEqual(current['origin'],earlier['origin'])
+            self.assertEqual(set(earlier['edges']).intersection(current['edges']),set(earlier['edges']))
+            self.assertGreater(len(current['edges']),len(earlier['edges']))
+
 
     def test_first_cottage_and_offline_rent(self):
         state=self.opening()
         self.assertEqual(len(state['citizens']),6)
-        self.act('advance',seconds=48*3600)
-        state=self.act('tax',site='3,0')
-        self.assertEqual(state['coins'],42)
+        state=self.act('advance',seconds=48*3600)
+        self.assertEqual(state['coins'],78)
         self.assertEqual(game.count(state['sites']['1,0']['output']),12)
+
+    def test_buy_planks_and_unlock_log_purchases_with_a_sawmill(self):
+        with self.assertRaisesRegex(game.RuleError,'Build a sawmill'):
+            self.act('buy supplies',site='0,0',good='pine log',qty=1)
+        state=self.act('buy supplies',site='0,0',good='pine plank',qty=3)
+        self.assertEqual(state['coins'],18)
+        self.assertEqual(state['sites']['0,0']['shared'],[dict(good='pine plank',qty=3,q=50)])
+        self.act('walk',enabled=True)
+        self.step()
+        self.act('plan',site='1,0',kind='sawmill')
+        self.finish_build('1,0')
+        state=self.act('buy supplies',site='0,0',good='pine log',qty=1)
+        self.assertEqual(state['coins'],16)
+        self.assertEqual(state['sites']['0,0']['shared'][-1],dict(good='pine log',qty=1,q=50))
+
+    def test_demolish_starter_building_and_reuse_grant(self):
+        self.act('walk',enabled=True)
+        self.step()
+        self.act('plan',site='1,0',kind='lumberjack station')
+        self.finish_build('1,0')
+        with self.assertRaisesRegex(game.RuleError,'town store'):
+            self.act('demolish',site='0,0')
+        state=self.act('demolish',site='1,0')
+        self.assertNotIn('1,0',state['sites'])
+        self.assertIn('1,0',state['tiles'])
+        self.assertEqual(game.count(state['sites']['0,0']['shared']),1)
+        self.assertFalse(any(c['assignment'] for c in state['citizens']))
+        xp=state['xp']
+        state=self.act('plan',site='1,0',kind='lumberjack station')
+        self.assertEqual(state['sites']['1,0']['cost'],[])
+        state=self.finish_build('1,0')
+        self.assertEqual(state['xp'],xp)
+        self.assertEqual(state['sites']['1,0']['output'],[])
 
     def test_survey_hidden_and_duplicate_concurrent(self):
         self.act('walk',enabled=True)
@@ -89,14 +194,16 @@ class Acceptance(unittest.TestCase):
         self.act('walk',enabled=True)
         self.step()
         self.act('plan',site='1,0',kind='lumberjack station')
-        self.act('build',site='1,0')
+        self.finish_build('1,0')
         self.step()
         self.act('plan',site='2,0',kind='sawmill')
-        self.act('build',site='2,0')
+        self.finish_build('2,0')
         state=self.act('haul',site='1,0',destination='2,0',buffer='input',good='pine log',qty=1)
         self.assertEqual(state['coins'],27)
         self.assertFalse(state['jobs'][0]['done'])
         self.assertFalse(state['sites']['2,0']['batch'])
+        with self.assertRaisesRegex(game.RuleError,'incoming deliveries'):
+            self.act('demolish',site='2,0')
         state=self.act('advance',seconds=360)
         self.assertTrue(state['jobs'][0]['done'])
         self.assertEqual(game.count(state['sites']['2,0']['output']),1)
@@ -138,8 +245,8 @@ class Acceptance(unittest.TestCase):
         self.act('advance',seconds=1)
         state=self.act('fix',x=60.5,y=60,accuracy=5)
         self.assertEqual(state['roads']['0,1']['passages'],1)
-        state=self.act('road',road='0,1',tier=2)
-        self.assertEqual(state['coins'],26)
+        with self.assertRaisesRegex(game.RuleError,'require level 2 or 3'):
+            self.act('road',road='0,1',tier=2)
 
     def test_export_exact_floor_and_replay(self):
         g=game.new_game('export',0)

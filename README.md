@@ -14,12 +14,22 @@ Open http://localhost:8080, or forward port 8080 in a Codespace and open the for
 
 ### First cottage
 
-1. Start a walk and move east once. On the pine tile, place and finish the lumberjack station using its grant.
-2. Collect its opening log and move east again. Place and finish the granted sawmill, then deliver the log to its input.
+1. Start a walk and move east once. On the pine tile, place the lumberjack station blueprint and start construction using its grant. It opens after three minutes.
+2. Collect its opening log and move east again. Place and start the granted sawmill. After its three-minute build, deliver the log to its input.
 3. Advance the clock by at least three minutes and collect the plank. Move east, plan a cottage and deposit the plank in its construction buffer.
-4. Advance the clock by fifteen minutes, return to the grove, collect another log and take it to the sawmill. Repeat the delivery and finish the cottage. Claim rent from its site panel after advancing the clock an hour.
+4. Advance the clock by fifteen minutes, return to the grove, collect another log and take it to the sawmill. Deliver the second plank and start construction. The cottage opens six minutes later and earns one coin per game hour.
 
-The arrow buttons simulate 60 m fixture walks and advance the clock by 30 seconds. After a long clock jump, use another movement or the same-site fix endpoint before taking an on-site action. Research, surveying, hiring and claiming rent work remotely. Delete the city from the City panel to remove its save.
+The arrow buttons simulate 60 m fixture walks and advance the clock by 30 seconds. After a long clock jump, use another movement or the same-site fix endpoint before taking an on-site action. Research, surveying and hiring work remotely. Delete the city from the City panel to remove its save.
+
+## Expo Go in Codespaces
+
+Run `./restart-expo` from the repository root in the Codespace associated with the existing QR code. It restarts the GPS API on port 8090 and Metro on port 8081, publishes those two ports if needed, and checks both public URLs before reporting that the app is ready. Scan `mobile/assets/expo-go-qr.png` in Expo Go. Your city stays in the existing SQLite database.
+
+Expo Go records only while the app is in the foreground. For screen-locked discovery, use a native development build and enable **Track with screen locked** on the map.
+
+If this is a fresh checkout, run `npm ci` in `mobile` first. Startup logs are in `mobile/.expo/vestigia-run/`.
+
+For an outdoor playtest, run `./restart-expo --console` in the Codespace’s VS Code terminal and leave it open while you play. API requests appear in the terminal and are saved to `mobile/.expo/vestigia-run/api.log`. Press Ctrl+C to stop following the log. The API and Metro continue running.
 
 ## Native development build
 
@@ -32,11 +42,13 @@ npm run android
 # On macOS with Xcode and CocoaPods, use npm run ios instead.
 ```
 
-Use the forwarded HTTPS API URL for a physical device. For a local Android emulator on the same machine as the API, the host address is `10.0.2.2`. To use an installed development build, run `npm start` in `mobile`. The Expo app uses the same fixture arrows and clock when talking to the fixture backend. Once connected to a GPS backend it requests location only when you locate the city, start a walk or use an on-site action. Screen-locked tracking is an opt-in for that walk. If background permission is declined it records in the foreground. The task stores unsent fixes on the device and synchronizes them when the app is active again.
+Use the forwarded HTTPS API URL for a physical device. For a local Android emulator on the same machine as the API, the host address is `10.0.2.2`. To use an installed development build, run `npm start` in `mobile`. The Expo app uses the same fixture arrows and clock when talking to the fixture backend. Once connected to a GPS backend, the app requests foreground location permission and starts tracking automatically when it locates your city on a mapped pedestrian path. Screen-locked tracking is optional and can be enabled from the map. If background permission is declined it records in the foreground. The task stores unsent fixes on the device and synchronizes them when the app is active again.
 
 ### GPS and Google Maps
 
-The Android package and iOS bundle ID are both `com.vestigia.city`. Enable the Maps SDKs in a billing-enabled Google Cloud project. Restrict the Android key to that package and the signing certificate SHA-1 used for the build. Restrict the iOS key to the bundle ID. Set `VESTIGIA_MAPS_ANDROID_KEY` and/or `VESTIGIA_MAPS_IOS_KEY` in the native build environment and rebuild. The GPS client offers the site list even without a map key.
+The Android package and iOS bundle ID are both `com.vestigia.city`. Enable the Maps SDKs in a billing-enabled Google Cloud project. Restrict the Android key to that package and the signing certificate SHA-1 used for the build. Restrict the iOS key to the bundle ID. Set `VESTIGIA_MAPS_ANDROID_KEY` and/or `VESTIGIA_MAPS_IOS_KEY` in the native build environment and rebuild. Without a map key, GPS discovery uses the illustrated settlement map and the revealed site list.
+
+For location-based onboarding, set `VESTIGIA_OVERPASS_URL` to a read-only Overpass interpreter with coverage for your beta. The server fetches a bounded area around the first accurate GPS fix and loads adjacent areas on later walks. The city keeps its original grid and previously imported edges. The URL stays on the server, and the provider receives area bounds only. Use a dedicated or contracted map-data provider for a public launch.
 
 A separate pedestrian graph controls access and haul routing. To exercise the GPS service with simulated coordinates around the provided origin, prepare the sample graph:
 
@@ -45,7 +57,7 @@ python3 import_pedestrian.py fixtures/pedestrian.json /tmp/vestigia-graph.json 5
 VESTIGIA_PEDESTRIAN_GRAPH=/tmp/vestigia-graph.json ./dev
 ```
 
-Start a fresh city for a different graph. For a real area, replace the input with a bounded Overpass JSON export containing pedestrian ways and all referenced nodes, including their tags. Use the center latitude and longitude as the metric projection origin. The importer excludes forbidden ways and keeps separately tagged layers disconnected except at explicit transitions. Shared OSM node IDs define junctions. The importer pairs aligned sidewalks that identify the same street and layer. The optional `vestigia:section` way tag links curated pavement pieces for road credit. OSM imports require the applicable attribution and data license terms. Keep the imported graph bounded and review crossing and access coverage before a device walk. Use a separate save database for a different deployment or test district.
+Start a fresh city for a different graph. For a real area, replace the input with a bounded Overpass JSON export containing pedestrian ways and all referenced nodes, including their tags. Use the center latitude and longitude as the metric projection origin. The importer excludes forbidden ways. Shared OSM node IDs define junctions, including at bridge approaches. Paths that cross at different heights without a shared node stay separate. The importer pairs aligned sidewalks that identify the same street and layer. The optional `vestigia:section` way tag links curated pavement pieces for road credit. OSM imports require the applicable attribution and data license terms. Keep the imported graph bounded and review crossing and access coverage before a device walk. Use a separate save database for a different deployment or test district.
 
 ### PostgreSQL and real accounts
 
@@ -74,6 +86,7 @@ All endpoints return JSON except the static application files. Create a city wit
 | Request | Result |
 | --- | --- |
 | `GET /api/catalog` | Versioned sites, recipes, crops, prices, technologies and household uses |
+| `POST /api/map/paths` | Label-free path geometry for a bounded viewport. An optional matched edge identifies connected paths near the player. |
 | `GET /api/city` | Public city snapshot after elapsed events reconcile |
 | `DELETE /api/city` | Removes the city and its replay records |
 | `POST /api/quote` | Route distance, fee and duration for a source and destination |

@@ -1,6 +1,7 @@
 import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 import {useEffect,useRef,useState} from 'react';
-import {AppState,Button,Platform,Text,View} from 'react-native';
+import {AppState,Platform,View} from 'react-native';
+import {Button, Text} from './GameUI';
 import {request} from './api';
 
 type Purchase = {id:string;product:string;receipt:string};

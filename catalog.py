@@ -18,6 +18,14 @@ TECH = {
     'Household trades': (2, ['Craft production', 'Agriculture']), 'Smelting': (2, ['Prospecting']),
     'Metalworking': (3, ['Smelting', 'Craft production']), 'Jewellery': (3, ['Smelting', 'Building materials']),
     'Precision engineering': (4, ['Metalworking', 'Building materials']),
+    'Horticulture': (2, ['Agriculture']),
+    'Animal husbandry': (2, ['Agriculture']),
+    'Aquaculture': (3, ['Animal husbandry']),
+    'Specialty crops': (3, ['Horticulture']),
+    'Quarrying': (2, ['Prospecting']),
+    'Deep mining': (3, ['Prospecting', 'Smelting']),
+    'Food preservation': (3, ['Food processing', 'Horticulture']),
+    'Industrial alloys': (4, ['Deep mining', 'Metalworking']),
 }
 ALIASES = {'planks':'plank','tools':'tool','egg':'eggs','gears':'gear','stopper':'stoppers',
            'carrot':'carrots','quilt':'quilts','1 clover':'clover','panel':'furniture panels','grit':'abrasive grit','shelves':'shelves'}
@@ -56,12 +64,16 @@ def recipe(facility, spec, minutes, tech, bonus=1, label=None):
     return key
 
 site('town store', shared=60)
+site('local marketplace','4 plank + 2 stone',shared=60)
+site('market hall','6 plank + 4 mortar + 2 fittings',shared=60)
 site('warehouse', '6 plank + 4 fittings', shared=120)
 site('export depot','6 plank + 4 bricks',shared=60)
 for name,cost in {
  'cottage':'2 plank','primary school':'4 plank + 2 stone',
+ 'high school':'5 plank + 3 stone',
  'technical college':'6 plank + 4 bricks','university':'8 bricks + 4 iron bars + 4 paper',
- 'library':'6 bricks + 4 glass + 4 books','market hall':'6 plank + 4 mortar + 2 fittings',
+ 'library':'6 bricks + 4 glass + 4 books',
+ 'police station':'4 plank + 4 stone','fire station':'4 plank + 4 bricks',
  'clock tower':'8 stone + 4 brass + 2 clocks',
 }.items():
     site(name,cost)
@@ -78,11 +90,17 @@ for name, cost, credential in (
 EXTRACTORS = dict(zip(SURFACE, ('quarry','clay pit','sand pit','gravel pit','limestone quarry',
     'reed bed','resin tap','forager hut','forager hut','cork stand','willow coppice',
     'bamboo grove','basalt quarry','salt spring','amber bank')))
+RESOURCE_TECH = {
+    **{name:'Prospecting' for name in (*SURFACE,*MINERALS)},
+    **{name:'Settlement basics' for name in ('stone','clay')},
+    **{name:'Quarrying' for name in ('sand','gravel','limestone','basalt')},
+    **{name:'Deep mining' for name in ('nickel ore','chromite','bauxite','graphite')},
+}
 for material, facility in EXTRACTORS.items():
     site(facility,'3 plank',0)
-    recipe(facility,' → 1 '+material,8,'Settlement basics' if material in ('stone','clay') else 'Prospecting')
+    recipe(facility,' → 1 '+material,8,RESOURCE_TECH[material])
 for material in MINERALS:
-    recipe('mine',' → 1 '+material,15,'Prospecting')
+    recipe('mine',' → 1 '+material,15,RESOURCE_TECH[material])
 for wood in WOODS:
     recipe('lumberjack station',' → 1 '+wood+' log',15,'Settlement basics')
     recipe('sawmill','1 '+wood+' log → 1 '+wood+' plank',3,'Settlement basics')
@@ -104,7 +122,8 @@ GROUPS = {
  'Craft production':'fibre shed|basket maker|ropewalk|paper mill|pottery|furniture shop',
  'Building materials':'lime kiln|mason|stonecutter|glassworks',
  'Household trades':'weaving house|dye works|tailor|tannery|cobbler|chandlery|print shop',
- 'Smelting':'foundry','Metalworking':'alloy works|workshop','Jewellery':'jeweller',
+ 'Smelting':'foundry','Metalworking':'workshop','Jewellery':'jeweller',
+ 'Industrial alloys':'alloy works','Food preservation':'preserve kitchen|drying house|bottling house',
  'Precision engineering':'instrument maker|rubber works|machine works',
 }
 FACILITY_TECH = {name:tech for tech,names in GROUPS.items() for name in names.split('|')}
@@ -123,7 +142,10 @@ def manufacture(name, tier, batches):
             credential = 3
         site(name,cost,credential)
     for batch in batches.split('; '):
-        recipe(name,batch,minutes,FACILITY_TECH.get(name,'Food processing'),bonus)
+        tech=FACILITY_TECH.get(name,'Food processing')
+        if name=='foundry' and ('nickel ore' in batch or 'chromite' in batch):
+            tech='Industrial alloys'
+        recipe(name,batch,minutes,tech,bonus)
 
 for row in DATA['manufacturing']:
     manufacture(*row)
@@ -153,12 +175,16 @@ for name,tier,batches in [
 ANIMALS = {}
 for animal,feed,duration,output in DATA['animals']:
     facility = {'Bees':'apiary','Trout':'fish pond'}.get(animal,'paddock')
-    ANIMALS[animal] = recipe(facility,feed+' → '+output,int(duration.split()[0]),'Agriculture',label=animal)
+    ANIMALS[animal] = recipe(facility,feed+' → '+output,int(duration.split()[0]),
+                             'Aquaculture' if animal=='Trout' else 'Animal husbandry',label=animal)
 for plot,soil,entries in DATA['crops']:
     for crop,hours in re.findall(r'([a-zA-Z ]+?) (\d+) h',entries):
         crop = crop.strip().lower()
-        CROPS[crop] = dict(plot=plot.lower(), soil=soil.lower(), seconds=int(hours)*3600,
-            tech='Settlement basics' if crop in ('wheat','potatoes','beans') else 'Agriculture')
+        plot_name=plot.lower()
+        tech=('Settlement basics' if crop in ('wheat','potatoes','beans') else
+              'Specialty crops' if crop in ('tea','coffee','vanilla','saffron','rice') else
+              'Horticulture' if plot_name in ('orchard','trellis') else 'Agriculture')
+        CROPS[crop] = dict(plot=plot_name,soil=soil.lower(),seconds=int(hours)*3600,tech=tech)
 CROPS['latex'] = dict(plot='rubber grove',soil='sandy',seconds=28800,tech='Prospecting')
 
 def matches(requirement, commodity):

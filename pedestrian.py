@@ -26,6 +26,17 @@ def allowed(tags):
              foot in ('yes','designated','permissive') or tags.get('sidewalk') in ('yes','both','left','right')) and
             (tags.get('highway')!='cycleway' or foot in ('yes','designated','permissive')))
 
+def restore_osm_junctions(graph):
+    """Restore shared node IDs in graphs imported with layer-specific junctions."""
+    changed=False
+    for edge in graph['edges'].values():
+        for end in ('a','b'):
+            node,sep,layer=edge[end].partition('@')
+            if sep and node.lstrip('-').isdigit() and layer==edge.get('layer'):
+                edge[end]=node
+                changed=True
+    return changed
+
 def import_elements(data, origin):
     """Accept Overpass JSON containing ways and their referenced nodes."""
     nodes={str(e['id']):e for e in data['elements'] if e['type']=='node'}
@@ -47,10 +58,9 @@ def import_elements(data, origin):
             pieces=math.ceil(length/80)
             def split(i):
                 if i in (0,pieces):
-                    k=a if i==0 else b
-                    # Grade-separated ways connect only at an explicit transition.
-                    node=nodes[k].get('tags',{})
-                    return k if node.get('highway') in ('crossing','elevator','steps') else f'{k}@{layer}'
+                    # OSM joins bridge approaches with shared nodes. Ways that
+                    # only intersect in projection have distinct node IDs.
+                    return a if i==0 else b
                 return f"{way['id']}/{a}/{b}/{i}"
             for i in range(pieces):
                 mid=lambda n: {k:p[k]+(q[k]-p[k])*n/pieces for k in ('x','y')}
@@ -93,6 +103,18 @@ def pair_sidewalks(edges,sidewalks):
                 common='sidewalk:'+min(key,other_key)
                 first['canonical']=other['canonical']=common
                 break
+
+def edge_components(graph):
+    parents={}
+    def root(node):
+        parents.setdefault(node,node)
+        while parents[node]!=node:
+            parents[node]=parents[parents[node]]
+            node=parents[node]
+        return node
+    for edge in graph['edges'].values():
+        parents[root(edge['a'])]=root(edge['b'])
+    return {key:root(edge['a']) for key,edge in graph['edges'].items()}
 
 def candidates(graph,position,radius=24,excluded=()):
     options=[]

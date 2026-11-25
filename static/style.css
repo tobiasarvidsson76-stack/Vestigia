@@ -19,3 +19,16 @@ button:disabled{opacity:.5;cursor:default}select{width:100%}
 #panel{padding:1rem;border-top:1px solid var(--line);overflow-wrap:anywhere}#panel p{margin:.5rem 0}.row{padding:.65rem 0;border-bottom:1px solid var(--line)}.actions{display:flex;gap:.45rem;flex-wrap:wrap;margin:.6rem 0}
 label{display:block;margin:.5rem 0}label input{width:6rem}details{margin:.7rem 0}summary{cursor:pointer;padding:.45rem 0}
 @media(max-width:740px){main{grid-template-columns:1fr}#map{height:23rem}header{padding:.7rem 1rem}.directions span{font-size:.8rem}}
+
+.cell.known.pond{background:#234952;border-color:#48727b}
+
+.cell{position:relative}.tile-notice{position:absolute;top:2px;right:2px;width:1rem;height:1rem;line-height:1rem;border-radius:50%;background:#f3c471;color:#372518;font-weight:900}.attention{color:#f3c471;font-weight:700}
+
+.tile-label,.tile-notice{position:relative;z-index:1}.tile-notice{position:absolute}.tile-path{position:absolute;background:#ecd29b}.tile-path.east,.tile-path.west{top:50%;width:50%;height:4px}.tile-path.east{right:0}.tile-path.west{left:0}.tile-path.north,.tile-path.south{left:50%;height:50%;width:4px}.tile-path.north{top:0}.tile-path.south{bottom:0}
+.task-card{padding:.5rem .65rem;margin:.5rem 0;border:1px solid #405344;border-radius:6px}.task-card progress{display:block;width:100%;accent-color:#f3c471}.task-card progress[hidden]{display:none}#research-tree{overflow-x:auto;max-width:100%;margin:.5rem 0}.research-node{position:absolute;width:144px;height:54px;font-size:.85rem;line-height:1.2}.research-node[aria-pressed=true]{border-color:#f3c471}
+
+.action-notice{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem;border:1px solid #aa6550;border-radius:6px;background:#442923;color:#ffe1ce}
+
+.cell.marked{outline:2px dashed #9ae5d6;outline-offset:-2px}.map-flag{position:absolute;top:2px;left:3px;color:#9ae5d6;font-weight:900}
+
+.cell.known{border-top-color:#a59665;border-left-color:#887e57;border-bottom-color:#25362b;border-right-color:#25362b;border-width:2px}

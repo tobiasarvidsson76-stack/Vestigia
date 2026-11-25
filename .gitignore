@@ -2,6 +2,7 @@ __pycache__/
 *.sqlite3
 *.sqlite3-*
 .env
+/VESTIGIA_MAPS_ANDROID_KEY
 node_modules/
 .expo/
 mobile/.env*

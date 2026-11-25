@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+mobile="$root/mobile"
+run_dir="$mobile/.expo/vestigia-run"
+metro_port=8081
+api_port=8090
+map_provider=${VESTIGIA_OVERPASS_URL:-https://maps.mail.ru/osm/tools/overpass/api/interpreter}
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+case "$#:${1:-}" in
+    0:) console=false ;;
+    1:--console) console=true ;;
+    *) fail 'Usage: ./restart-expo [--console]' ;;
+esac
+
+[[ -n ${CODESPACE_NAME:-} && -n ${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-} ]] ||
+    fail 'Run this script in the Codespace associated with the Expo Go QR code.'
+for command in curl flock gh lsof node setsid; do
+    command -v "$command" >/dev/null || fail "Required command is missing: $command"
+done
+[[ -x "$mobile/node_modules/.bin/expo" ]] || fail 'Run npm ci in mobile before starting Expo.'
+
+mkdir -p "$run_dir"
+exec 9>"$run_dir/restart.lock"
+flock -n 9 || fail 'A Vestigia restart is already running.'
+
+api_url="https://$CODESPACE_NAME-$api_port.$GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN"
+metro_url="https://$CODESPACE_NAME-$metro_port.$GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN"
+
+app_listeners() {
+    local port=$1 directory=$2 expected=$3 pid cwd args
+    for pid in $(lsof -t -nP -iTCP:"$port" -sTCP:LISTEN || true); do
+        cwd=$(readlink "/proc/$pid/cwd") || continue
+        args=$(tr '\0' ' ' < "/proc/$pid/cmdline") || continue
+        [[ "$cwd" == "$directory" && " $args" == *" $expected "* ]] ||
+            fail "Port $port is already in use by another process (PID $pid)."
+        printf '%s\n' "$pid"
+    done
+}
+
+wait_for_url() {
+    local url=$1 log=$2 status attempt
+    for ((attempt=0; attempt<40; attempt++)); do
+        status=$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' "$url" || true)
+        [[ "$status" == 200 ]] && return 0
+        sleep 1
+    done
+    fail "Timed out waiting for $url. See $log."
+}
+
+api_pids=$(app_listeners "$api_port" "$root" 'server.py')
+metro_pids=$(app_listeners "$metro_port" "$mobile" './node_modules/.bin/expo start --go')
+if [[ -n "$api_pids$metro_pids" ]]; then
+    printf 'Stopping Vestigia API and Expo Go…\n'
+    for pid in $api_pids $metro_pids; do
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+    for port in "$api_port" "$metro_port"; do
+        for ((attempt=0; attempt<50; attempt++)); do
+            lsof -t -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null || break
+            sleep .2
+        done
+        (( attempt < 50 )) || fail "Timed out waiting for port $port to stop."
+    done
+fi
+
+printf 'Starting GPS API and Expo Go…\n'
+(
+    cd "$root"
+    exec setsid env PORT="$api_port" VESTIGIA_OVERPASS_URL="$map_provider" ./dev
+) >"$run_dir/api.log" 2>&1 </dev/null 9>&- &
+(
+    cd "$mobile"
+    exec setsid env CI=1 EXPO_OFFLINE=1 VESTIGIA_EXPO_GO_OUTDOORS=1 \
+        EXPO_PACKAGER_PROXY_URL="$metro_url" EXPO_PUBLIC_VESTIGIA_API="$api_url" \
+        ./node_modules/.bin/expo start --go --port "$metro_port"
+) >"$run_dir/metro.log" 2>&1 </dev/null 9>&- &
+
+wait_for_url "http://127.0.0.1:$api_port/api/catalog" "$run_dir/api.log"
+wait_for_url "http://127.0.0.1:$metro_port/status" "$run_dir/metro.log"
+
+list_ports() {
+    gh codespace ports -c "$CODESPACE_NAME" --json sourcePort,visibility
+}
+
+port_visibility() {
+    node -e 'const rows=JSON.parse(require("node:fs").readFileSync(0,"utf8"));
+        console.log(rows.find(row=>String(row.sourcePort)===process.argv[1])?.visibility ?? "missing");' "$1"
+}
+
+ports=$(list_ports)
+forwards=()
+for port in "$metro_port" "$api_port"; do
+    if [[ $(port_visibility "$port" <<<"$ports") == missing ]]; then
+        forwards+=("$port:$((port+20000))")
+    fi
+done
+if (( ${#forwards[@]} )); then
+    setsid gh codespace ports forward "${forwards[@]}" -c "$CODESPACE_NAME" \
+        >"$run_dir/ports.log" 2>&1 </dev/null 9>&- &
+fi
+
+visibility=()
+for port in "$metro_port" "$api_port"; do
+    if [[ $(port_visibility "$port" <<<"$ports") != public ]]; then
+        visibility+=("$port:public")
+    fi
+done
+if (( ${#visibility[@]} )); then
+    printf 'Enabling phone access to the Codespace ports…\n'
+    for ((attempt=0; attempt<10; attempt++)); do
+        gh codespace ports visibility "${visibility[@]}" -c "$CODESPACE_NAME" \
+            >"$run_dir/visibility.log" 2>&1 && break
+        sleep 1
+    done
+    (( attempt < 10 )) || fail "Could not publish the app ports. See $run_dir/visibility.log."
+fi
+
+wait_for_url "$api_url/api/catalog" "$run_dir/api.log"
+wait_for_url "$metro_url/status" "$run_dir/metro.log"
+printf 'Expo Go is ready. Scan mobile/assets/expo-go-qr.png or open exps://%s\n' "${metro_url#https://}"
+printf 'Logs are in %s\n' "$run_dir"
+
+if "$console"; then
+    exec 9>&-
+    printf 'Following API requests. Press Ctrl+C to stop following the log.\n'
+    exec tail -n 0 -F "$run_dir/api.log"
+fi
